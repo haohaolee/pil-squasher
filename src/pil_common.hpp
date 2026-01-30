@@ -9,16 +9,28 @@
 #include <vector>
 #include <array>
 #include <system_error>
-#include <format>
-#include <span>
-#include <bit>
 #include <cstring>
 #include <cerrno>
+#include <type_traits>
+
+#include <fmt/format.h>
+#include <tcb/span.hpp>
 
 #include "elf.h"
 #include "endian_utils.hpp"
 
 namespace pil {
+
+// C++17 polyfill for std::bit_cast
+template<typename To, typename From>
+To bit_cast(const From& src) noexcept {
+    static_assert(sizeof(To) == sizeof(From), "sizes must match");
+    static_assert(std::is_trivially_copyable<To>::value, "To must be trivially copyable");
+    static_assert(std::is_trivially_copyable<From>::value, "From must be trivially copyable");
+    To dst;
+    std::memcpy(&dst, &src, sizeof(To));
+    return dst;
+}
 
 // Qualcomm PIL segment type in p_flags (bits 24-26)
 // This is a Qualcomm-specific extension, not part of standard ELF
@@ -56,7 +68,7 @@ inline auto read_file_at(std::ifstream& file, size_t offset, size_t size)
     file.read(reinterpret_cast<char*>(buffer.data()), size);
 
     if (file.gcount() != static_cast<std::streamsize>(size)) {
-        throw Error(std::format("Incomplete read: expected {} bytes, got {} bytes at offset {}",
+        throw Error(fmt::format("Incomplete read: expected {} bytes, got {} bytes at offset {}",
                                size, file.gcount(), offset));
     }
 
@@ -71,19 +83,19 @@ auto read_struct_at(std::ifstream& file, size_t offset) -> T {
     file.read(reinterpret_cast<char*>(raw.data()), sizeof(T));
 
     if (file.gcount() != sizeof(T)) {
-        throw Error(std::format("Incomplete read: expected {} bytes, got {} bytes at offset {}",
+        throw Error(fmt::format("Incomplete read: expected {} bytes, got {} bytes at offset {}",
                                sizeof(T), file.gcount(), offset));
     }
 
-    return std::bit_cast<T>(raw);
+    return bit_cast<T>(raw);
 }
 
-inline void write_file_at(std::ofstream& file, size_t offset, std::span<const uint8_t> data) {
+inline void write_file_at(std::ofstream& file, size_t offset, tcb::span<const uint8_t> data) {
     file.seekp(offset);
     file.write(reinterpret_cast<const char*>(data.data()), data.size());
 }
 
-inline void append_to_file(std::ofstream& file, std::span<const uint8_t> data) {
+inline void append_to_file(std::ofstream& file, tcb::span<const uint8_t> data) {
     file.seekp(0, std::ios::end);
     file.write(reinterpret_cast<const char*>(data.data()), data.size());
 }
@@ -114,7 +126,7 @@ inline ElfFormat detect_elf_format(std::ifstream& file) {
     }
 
     if (e_ident[EI_CLASS] != ELFCLASS32 && e_ident[EI_CLASS] != ELFCLASS64) {
-        throw Error(std::format("Unsupported ELF class {}", e_ident[EI_CLASS]));
+        throw Error(fmt::format("Unsupported ELF class {}", e_ident[EI_CLASS]));
     }
 
     return ElfFormat{e_ident[EI_CLASS], is_little_endian};
@@ -159,9 +171,9 @@ PhdrInfo<ElfPhdr> get_phdr_info(const ElfPhdr& phdr, bool is_little_endian) {
 // Common file writing helpers
 
 inline void write_elf_header_and_phdrs(std::ofstream& out,
-                                       std::span<const uint8_t> ehdr_bytes,
+                                       tcb::span<const uint8_t> ehdr_bytes,
                                        size_t phoff,
-                                       std::span<const uint8_t> phdrs_bytes,
+                                       tcb::span<const uint8_t> phdrs_bytes,
                                        size_t phdr_size)
 {
     write_file_at(out, 0, ehdr_bytes);

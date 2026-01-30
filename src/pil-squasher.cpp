@@ -22,11 +22,11 @@ auto read_segment_data(std::ifstream& mdt, const fs::path& mdt_path,
         return segment;
     } else {
         auto bxx_path = mdt_path;
-        bxx_path.replace_extension(std::format(".b{:02d}", segment_index));
+        bxx_path.replace_extension(fmt::format(".b{:02d}", segment_index));
 
         std::ifstream bxx(bxx_path, std::ios::binary);
         if (!bxx) {
-            throw_system_error(std::format("Failed to open required segment file {}",
+            throw_system_error(fmt::format("Failed to open required segment file {}",
                                            bxx_path.string()));
         }
         bxx.exceptions(std::ios::failbit | std::ios::badbit);
@@ -41,14 +41,14 @@ void squash_impl(std::ifstream& mdt, std::ofstream& mbn, const fs::path& mdt_pat
     auto ehdr = read_elf_header<ElfHeader>(mdt);
     auto phdrs = read_program_headers<ElfHeader, ElfPhdr>(mdt, ehdr, is_little_endian);
 
-    write_file_at(mbn, 0, std::span{
+    write_file_at(mbn, 0, tcb::span<const uint8_t>{
         reinterpret_cast<const uint8_t*>(&ehdr),
         sizeof(ElfHeader)
     });
 
     auto phoff = from_file_endian(ehdr.e_phoff, is_little_endian);
     for (size_t i = 0; i < phdrs.size(); ++i) {
-        write_file_at(mbn, phoff + i * sizeof(ElfPhdr), std::span{
+        write_file_at(mbn, phoff + i * sizeof(ElfPhdr), tcb::span<const uint8_t>{
             reinterpret_cast<const uint8_t*>(&phdrs[i]),
             sizeof(ElfPhdr)
         });
@@ -71,18 +71,18 @@ void squash_impl(std::ifstream& mdt, std::ofstream& mbn, const fs::path& mdt_pat
 
 void squash(const fs::path& mdt_path, const fs::path& mbn_path) {
     if (mdt_path.extension() != ".mdt") {
-        throw Error(std::format("{} is not a .mdt file", mdt_path.string()));
+        throw Error(fmt::format("{} is not a .mdt file", mdt_path.string()));
     }
 
     std::ifstream mdt(mdt_path, std::ios::binary);
     if (!mdt) {
-        throw_system_error(std::format("Failed to open {}", mdt_path.string()));
+        throw_system_error(fmt::format("Failed to open {}", mdt_path.string()));
     }
     mdt.exceptions(std::ios::failbit | std::ios::badbit);
 
     std::ofstream mbn(mbn_path, std::ios::binary | std::ios::trunc);
     if (!mbn) {
-        throw_system_error(std::format("Failed to create {}", mbn_path.string()));
+        throw_system_error(fmt::format("Failed to create {}", mbn_path.string()));
     }
     mbn.exceptions(std::ios::failbit | std::ios::badbit);
 
@@ -100,7 +100,7 @@ void squash(const fs::path& mdt_path, const fs::path& mbn_path) {
 int main(int argc, char* argv[]) {
     try {
         if (argc != 3) {
-            std::cerr << std::format("Usage: {} <mbn output> <mdt input>\n",
+            std::cerr << fmt::format("Usage: {} <mbn output> <mdt input>\n",
                                      fs::path(argv[0]).filename().string());
             return 1;
         }
@@ -111,13 +111,13 @@ int main(int argc, char* argv[]) {
     } catch (const std::ios_base::failure& e) {
         auto ec = errno ? std::error_code(errno, std::system_category())
                         : std::make_error_code(std::errc::io_error);
-        std::cerr << std::format("I/O Error: {}\n", ec.message());
+        std::cerr << fmt::format("I/O Error: {}\n", ec.message());
         return 1;
     } catch (const std::system_error& e) {
-        std::cerr << std::format("Error: {} ({})\n", e.what(), e.code().message());
+        std::cerr << fmt::format("Error: {} ({})\n", e.what(), e.code().message());
         return 1;
     } catch (const std::exception& e) {
-        std::cerr << std::format("Error: {}\n", e.what());
+        std::cerr << fmt::format("Error: {}\n", e.what());
         return 1;
     }
 }
